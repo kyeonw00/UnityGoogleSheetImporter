@@ -13,6 +13,8 @@ namespace DataImporter
         private string sheetUrl = "";
         private SaveLocation saveLocation = SaveLocation.Resources;
         private bool isProcessing = false;
+        private string successMessage = "";
+        private double successMessageTime = 0;
         
         private enum SaveLocation
         {
@@ -90,6 +92,20 @@ namespace DataImporter
                 EditorGUILayout.Space(10);
                 EditorGUILayout.LabelField("Processing...", EditorStyles.centeredGreyMiniLabel);
             }
+            
+            // Display success message
+            if (!string.IsNullOrEmpty(successMessage) && EditorApplication.timeSinceStartup - successMessageTime < 5.0)
+            {
+                EditorGUILayout.Space(10);
+                
+                GUIStyle successStyle = new GUIStyle(EditorStyles.label);
+                successStyle.normal.textColor = new Color(0.2f, 0.8f, 0.2f);
+                successStyle.fontStyle = FontStyle.Bold;
+                successStyle.alignment = TextAnchor.MiddleCenter;
+                
+                EditorGUILayout.LabelField(successMessage, successStyle);
+                Repaint();
+            }
         }
         
         private string GetSaveFolder()
@@ -148,8 +164,9 @@ namespace DataImporter
                 
                 AssetDatabase.Refresh();
                 
-                EditorUtility.DisplayDialog("Success", 
-                    $"CSV imported successfully!\nSaved to: {fullPath}", "OK");
+                // Show success message in editor
+                successMessage = $"Successfully Created {sheetName} CSV File!";
+                successMessageTime = EditorApplication.timeSinceStartup;
                 
                 Debug.Log($"[GoogleSheetImporter] CSV imported: {fullPath}");
             }
@@ -198,8 +215,9 @@ namespace DataImporter
                 
                 AssetDatabase.Refresh();
                 
-                EditorUtility.DisplayDialog("Success", 
-                    $"Data classes generated successfully!\n\nClass: {classPath}\nCollection: {collectionPath}", "OK");
+                // Show success message in editor
+                successMessage = $"Successfully Created {sheetName} Data Class!";
+                successMessageTime = EditorApplication.timeSinceStartup;
                 
                 Debug.Log($"[GoogleSheetImporter] Classes generated:\n- {classPath}\n- {collectionPath}");
             }

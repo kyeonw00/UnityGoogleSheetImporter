@@ -88,17 +88,26 @@ namespace DataImporter
             
             var lines = csvData.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
             
-            if (lines.Length < 3)
+            if (lines.Length < 4)
             {
-                error = "CSV must have at least 3 rows (field names, field types, and data).";
+                error = "CSV must have at least 4 rows (sheet name, field names, field types, and data).";
                 return false;
             }
             
-            // Parse first row (field names)
-            fieldNames = ParseCsvLine(lines[0]);
+            // Parse first row (sheet name)
+            string[] firstRow = ParseCsvLine(lines[0]);
+            sheetName = GenerateClassName(firstRow[0]);
+            if (string.IsNullOrEmpty(sheetName))
+            {
+                error = "Sheet name (first row, first cell) is empty or invalid.";
+                return false;
+            }
             
-            // Parse second row (field types)
-            fieldTypes = ParseCsvLine(lines[1]);
+            // Parse second row (field names)
+            fieldNames = ParseCsvLine(lines[1]);
+            
+            // Parse third row (field types)
+            fieldTypes = ParseCsvLine(lines[2]);
             
             if (fieldNames.Length != fieldTypes.Length)
             {
@@ -116,13 +125,6 @@ namespace DataImporter
             if (!ValidateFieldTypes(fieldTypes, out error))
             {
                 return false;
-            }
-            
-            // Generate sheet name from first field name (or use a default)
-            sheetName = GenerateClassName(fieldNames[0]);
-            if (string.IsNullOrEmpty(sheetName))
-            {
-                sheetName = "DataClass";
             }
             
             return true;
@@ -219,8 +221,27 @@ namespace DataImporter
         {
             var lines = csvData.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
             
-            // Skip first two rows (field names and types)
-            var dataLines = lines.Skip(2).Where(line => !string.IsNullOrWhiteSpace(line));
+            // Skip first two rows (sheet name/field names and types)
+            // Also remove first column (sheet name column) from data rows
+            var dataLines = new List<string>();
+            
+            for (int i = 2; i < lines.Length; i++)
+            {
+                string line = lines[i];
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+                
+                // Parse and remove first column
+                string[] cells = ParseCsvLine(line);
+                if (cells.Length > 1)
+                {
+                    string[] dataCells = new string[cells.Length - 1];
+                    Array.Copy(cells, 1, dataCells, 0, dataCells.Length);
+                    
+                    // Reconstruct CSV line
+                    dataLines.Add(string.Join(",", dataCells));
+                }
+            }
             
             return string.Join("\n", dataLines);
         }
