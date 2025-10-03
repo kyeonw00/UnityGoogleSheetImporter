@@ -7,14 +7,14 @@ namespace DataImporter
 {
     public class GoogleSheetImporter : EditorWindow
     {
-        private const string PREFS_KEY_URL = "GoogleSheetImporter_LastURL";
-        private const string PREFS_KEY_SAVE_LOCATION = "GoogleSheetImporter_SaveLocation";
+        private const string PrefsKeyURL = "GoogleSheetImporter_LastURL";
+        private const string PrefsKeySaveLocation = "GoogleSheetImporter_SaveLocation";
         
-        private string sheetUrl = "";
-        private SaveLocation saveLocation = SaveLocation.Resources;
-        private bool isProcessing = false;
-        private string successMessage = "";
-        private double successMessageTime = 0;
+        private string m_SheetUrl = "";
+        private SaveLocation m_SaveLocation = SaveLocation.Resources;
+        private bool m_IsProcessing = false;
+        private string m_SuccessMessage = "";
+        private double m_SuccessMessageTime = 0;
         
         private enum SaveLocation
         {
@@ -31,8 +31,8 @@ namespace DataImporter
         private void OnEnable()
         {
             // Load last used URL and save location
-            sheetUrl = EditorPrefs.GetString(PREFS_KEY_URL, "");
-            saveLocation = (SaveLocation)EditorPrefs.GetInt(PREFS_KEY_SAVE_LOCATION, 0);
+            m_SheetUrl = EditorPrefs.GetString(PrefsKeyURL, "");
+            m_SaveLocation = (SaveLocation)EditorPrefs.GetInt(PrefsKeySaveLocation, 0);
         }
         
         private void OnGUI()
@@ -43,197 +43,185 @@ namespace DataImporter
             
             // URL Input
             EditorGUILayout.LabelField("Google Sheet URL", EditorStyles.label);
-            string newUrl = EditorGUILayout.TextField(sheetUrl);
-            if (newUrl != sheetUrl)
+            var newUrl = EditorGUILayout.TextField(m_SheetUrl);
+            if (newUrl != m_SheetUrl)
             {
-                sheetUrl = newUrl;
-                EditorPrefs.SetString(PREFS_KEY_URL, sheetUrl);
+                m_SheetUrl = newUrl;
+                EditorPrefs.SetString(PrefsKeyURL, m_SheetUrl);
             }
             
             EditorGUILayout.Space(10);
             
             // Save Location
             EditorGUILayout.LabelField("Save Location", EditorStyles.label);
-            SaveLocation newLocation = (SaveLocation)EditorGUILayout.EnumPopup(saveLocation);
-            if (newLocation != saveLocation)
+            var newLocation = (SaveLocation)EditorGUILayout.EnumPopup(m_SaveLocation);
+            if (newLocation != m_SaveLocation)
             {
-                saveLocation = newLocation;
-                EditorPrefs.SetInt(PREFS_KEY_SAVE_LOCATION, (int)saveLocation);
+                m_SaveLocation = newLocation;
+                EditorPrefs.SetInt(PrefsKeySaveLocation, (int)m_SaveLocation);
             }
             
             EditorGUILayout.Space(10);
             
             // Display save path info
-            string savePath = GetSaveFolder();
+            var savePath = GetSaveFolder();
             EditorGUILayout.HelpBox($"Files will be saved to: {savePath}", MessageType.Info);
-            
             EditorGUILayout.Space(10);
-            
-            GUI.enabled = !isProcessing && !string.IsNullOrEmpty(sheetUrl);
+            GUI.enabled = !m_IsProcessing && !string.IsNullOrEmpty(m_SheetUrl);
             
             // Import CSV Button
             if (GUILayout.Button("Import CSV", GUILayout.Height(30)))
-            {
-                ImportCSV();
-            }
+                ImportCsv();
             
             EditorGUILayout.Space(5);
             
             // Generate Data Class Button
             if (GUILayout.Button("Generate Data Class", GUILayout.Height(30)))
-            {
                 GenerateDataClass();
-            }
             
             GUI.enabled = true;
             
-            if (isProcessing)
+            if (m_IsProcessing)
             {
                 EditorGUILayout.Space(10);
                 EditorGUILayout.LabelField("Processing...", EditorStyles.centeredGreyMiniLabel);
             }
             
             // Display success message
-            if (!string.IsNullOrEmpty(successMessage) && EditorApplication.timeSinceStartup - successMessageTime < 5.0)
+            if (!string.IsNullOrEmpty(m_SuccessMessage) && EditorApplication.timeSinceStartup - m_SuccessMessageTime < 5.0)
             {
                 EditorGUILayout.Space(10);
                 
-                GUIStyle successStyle = new GUIStyle(EditorStyles.label);
-                successStyle.normal.textColor = new Color(0.2f, 0.8f, 0.2f);
-                successStyle.fontStyle = FontStyle.Bold;
-                successStyle.alignment = TextAnchor.MiddleCenter;
-                
-                EditorGUILayout.LabelField(successMessage, successStyle);
+                var successStyle = new GUIStyle(EditorStyles.label)
+                {
+                    normal = { textColor = new Color(0.2f, 0.8f, 0.2f) },
+                    fontStyle = FontStyle.Bold,
+                    alignment = TextAnchor.MiddleCenter
+                };
+
+                EditorGUILayout.LabelField(m_SuccessMessage, successStyle);
                 Repaint();
             }
         }
         
         private string GetSaveFolder()
         {
-            string baseFolder = saveLocation == SaveLocation.Resources ? "Assets/Resources" : "Assets/StreamingAssets";
+            var baseFolder = m_SaveLocation == SaveLocation.Resources ? "Assets/Resources" : "Assets/StreamingAssets";
             return $"{baseFolder}/Database";
         }
         
-        private void ImportCSV()
+        private void ImportCsv()
         {
-            isProcessing = true;
+            m_IsProcessing = true;
             
             try
             {
                 // Parse sheet URL and download
                 var parser = new GoogleSheetParser();
-                var csvData = parser.DownloadSheet(sheetUrl);
+                var csvData = parser.DownloadSheet(m_SheetUrl);
                 
                 if (string.IsNullOrEmpty(csvData))
                 {
-                    ShowError("Failed to download sheet data.");
+                    DisplayErrorMessage("Failed to download sheet data.");
                     return;
                 }
                 
                 // Validate and parse
-                if (!parser.ValidateAndParse(csvData, out string sheetName, out string[] fieldNames, out string[] fieldTypes, out string error))
+                if (!parser.TryValidateAndParseCsvData(csvData, out string sheetName, out string[] fieldNames, out string[] fieldTypes, out string error))
                 {
-                    ShowError(error);
+                    DisplayErrorMessage(error);
                     return;
                 }
                 
                 // Prepare save path
-                string saveFolder = GetSaveFolder();
+                var saveFolder = GetSaveFolder();
                 if (!Directory.Exists(saveFolder))
-                {
                     Directory.CreateDirectory(saveFolder);
-                }
                 
-                string fileName = $"{sheetName}.csv";
-                string fullPath = Path.Combine(saveFolder, fileName);
+                var fileName = $"{sheetName}.csv";
+                var fullPath = Path.Combine(saveFolder, fileName);
                 
                 // Check if file exists
-                if (File.Exists(fullPath))
-                {
-                    if (!EditorUtility.DisplayDialog("Overwrite File?", 
-                        $"File '{fileName}' already exists. Do you want to overwrite it?", 
-                        "Yes", "No"))
-                    {
-                        return;
-                    }
-                }
+                if (File.Exists(fullPath) &&
+                    !EditorUtility.DisplayDialog("Overwrite File?", $"File '{fileName}' already exists. Do you want to overwrite it?", "Yes", "No"))
+                    return;
                 
                 // Save CSV without header rows (only data rows)
-                string dataOnlyCsv = parser.GetDataOnlyCsv(csvData);
+                var dataOnlyCsv = parser.GetDataOnlyCsv(csvData);
                 File.WriteAllText(fullPath, dataOnlyCsv);
                 
                 AssetDatabase.Refresh();
                 
                 // Show success message in editor
-                successMessage = $"Successfully Created {sheetName} CSV File!";
-                successMessageTime = EditorApplication.timeSinceStartup;
+                m_SuccessMessage = $"Successfully Created {sheetName} CSV File!";
+                m_SuccessMessageTime = EditorApplication.timeSinceStartup;
                 
                 Debug.Log($"[GoogleSheetImporter] CSV imported: {fullPath}");
             }
             catch (Exception ex)
             {
-                ShowError($"Unexpected error: {ex.Message}");
+                DisplayErrorMessage($"Unexpected error: {ex.Message}");
                 Debug.LogError($"[GoogleSheetImporter] Error: {ex}");
             }
             finally
             {
-                isProcessing = false;
+                m_IsProcessing = false;
                 Repaint();
             }
         }
         
         private void GenerateDataClass()
         {
-            isProcessing = true;
+            m_IsProcessing = true;
             
             try
             {
                 // Parse sheet URL and download
                 var parser = new GoogleSheetParser();
-                var csvData = parser.DownloadSheet(sheetUrl);
+                var csvData = parser.DownloadSheet(m_SheetUrl);
                 
                 if (string.IsNullOrEmpty(csvData))
                 {
-                    ShowError("Failed to download sheet data.");
+                    DisplayErrorMessage("Failed to download sheet data.");
                     return;
                 }
                 
                 // Validate and parse
-                if (!parser.ValidateAndParse(csvData, out string sheetName, out string[] fieldNames, out string[] fieldTypes, out string error))
+                if (!parser.TryValidateAndParseCsvData(csvData, out string sheetName, out string[] fieldNames, out string[] fieldTypes, out string error))
                 {
-                    ShowError(error);
+                    DisplayErrorMessage(error);
                     return;
                 }
                 
                 // Generate class files
                 var generator = new DataClassGenerator();
-                if (!generator.GenerateClass(sheetName, fieldNames, fieldTypes, out string classPath, out string collectionPath, out error))
+                if (!generator.TryGenerateClass(sheetName, fieldNames, fieldTypes, out string classPath, out string collectionPath, out error))
                 {
-                    ShowError(error);
+                    DisplayErrorMessage(error);
                     return;
                 }
                 
                 AssetDatabase.Refresh();
                 
                 // Show success message in editor
-                successMessage = $"Successfully Created {sheetName} Data Class!";
-                successMessageTime = EditorApplication.timeSinceStartup;
+                m_SuccessMessage = $"Successfully Created {sheetName} Data Class!";
+                m_SuccessMessageTime = EditorApplication.timeSinceStartup;
                 
                 Debug.Log($"[GoogleSheetImporter] Classes generated:\n- {classPath}\n- {collectionPath}");
             }
             catch (Exception ex)
             {
-                ShowError($"Unexpected error: {ex.Message}");
+                DisplayErrorMessage($"Unexpected error: {ex.Message}");
                 Debug.LogError($"[GoogleSheetImporter] Error: {ex}");
             }
             finally
             {
-                isProcessing = false;
+                m_IsProcessing = false;
                 Repaint();
             }
         }
         
-        private void ShowError(string message)
+        private void DisplayErrorMessage(string message)
         {
             EditorUtility.DisplayDialog("Error", message, "OK");
             Debug.LogError($"[GoogleSheetImporter] {message}");
